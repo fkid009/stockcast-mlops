@@ -34,6 +34,8 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts   #  ← 추가
+      - ./data:/opt/airflow/data    
 
   airflow-scheduler:
     image: airflow-custom:latest
@@ -47,6 +49,8 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts   #  ← 추가
+      - ./data:/opt/airflow/data    
 
   airflow-worker:
     image: airflow-custom:latest
@@ -60,6 +64,8 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts   #  ← 추가
+      - ./data:/opt/airflow/data    
 
   airflow-init:
     image: airflow-custom:latest
