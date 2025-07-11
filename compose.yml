@@ -1,21 +1,18 @@
 #
 # docker‑compose.yml
 #
-
 x-airflow-common: &airflow-common-env
   AIRFLOW__CORE__EXECUTOR: CeleryExecutor
   AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
   AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
   AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
   AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-  # ───────── PYTHONPATH ─────────
   PYTHONPATH: /opt/airflow/scripts:${PYTHONPATH}
 
 services:
-  # ──────────── Infra ────────────
+  # ─────────── Infra ───────────
   postgres:
     image: postgres:13
-    container_name: postgres
     restart: always
     environment:
       POSTGRES_USER: airflow
@@ -26,21 +23,15 @@ services:
 
   redis:
     image: redis:latest
-    container_name: redis
     restart: always
 
   # ─────────── Airflow ───────────
   airflow-webserver:
     image: airflow-custom:latest
-    container_name: airflow-webserver
-    depends_on:
-      - postgres
-      - redis
-    environment:
-      <<: *airflow-common-env
+    depends_on: [postgres, redis]
+    environment: *airflow-common-env
     command: webserver
-    ports:
-      - "8080:8080"
+    ports: ["8080:8080"]
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
@@ -51,11 +42,8 @@ services:
 
   airflow-scheduler:
     image: airflow-custom:latest
-    container_name: airflow-scheduler
-    depends_on:
-      - airflow-webserver
-    environment:
-      <<: *airflow-common-env
+    depends_on: [airflow-webserver]
+    environment: *airflow-common-env
     command: scheduler
     volumes:
       - ./dags:/opt/airflow/dags
@@ -67,11 +55,8 @@ services:
 
   airflow-worker:
     image: airflow-custom:latest
-    container_name: airflow-worker
-    depends_on:
-      - airflow-webserver
-    environment:
-      <<: *airflow-common-env
+    depends_on: [airflow-webserver]
+    environment: *airflow-common-env
     command: celery worker
     volumes:
       - ./dags:/opt/airflow/dags
@@ -83,12 +68,8 @@ services:
 
   airflow-init:
     image: airflow-custom:latest
-    container_name: airflow-init
-    depends_on:
-      - postgres
-      - redis
-    environment:
-      <<: *airflow-common-env
+    depends_on: [postgres, redis]
+    environment: *airflow-common-env
     entrypoint: /bin/bash
     command: >
       -c "
@@ -97,22 +78,35 @@ services:
           --role Admin --email admin@example.com --password admin
       "
 
-  # ────────── MLflow UI ──────────
+  # ─────────── MLflow UI ───────────
   mlflow:
-    image: python:3.8-slim        # 필요 시 자체 이미지 사용
+    image: python:3.8-slim
     container_name: mlflow
     working_dir: /opt/mlflow
     entrypoint: >
-      sh -c "pip install --no-cache-dir mlflow && 
+      sh -c "pip install --no-cache-dir mlflow &&
              mlflow server --host 0.0.0.0 --port 5000
              --backend-store-uri sqlite:///mlruns.db
              --default-artifact-root /opt/mlflow/mlruns"
     volumes:
       - ./mlruns:/opt/mlflow/mlruns
-    ports:
-      - "5000:5000"
+    ports: ["5000:5000"]
     restart: always
 
-# ───────────── Volumes ─────────────
+  # ─────────── Streamlit ───────────
+  streamlit:
+    image: airflow-custom:latest          # 같은 커스텀 이미지 사용
+    container_name: streamlit
+    entrypoint: ""                        # Airflow entrypoint 제거
+    command: >
+      streamlit run /opt/airflow/scripts/streamlit_app.py
+      --server.port 8501 --server.address 0.0.0.0
+      --server.enableCORS false
+    ports: ["8501:8501"]
+    volumes:
+      - ./scripts:/opt/airflow/scripts
+      - ./data:/opt/airflow/data
+    restart: always                       # 컨테이너 재시작 시 자동 실행
+
 volumes:
   postgres-db-volume:

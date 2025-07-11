@@ -12,3 +12,12 @@ CREATE TABLE IF NOT EXISTS stock_price (
     ticker        TEXT
 );
 
+CREATE TABLE IF NOT EXISTS stock_pred_eval (
+    date        DATE,
+    ticker      TEXT,
+    pred_close  FLOAT,
+    true_close  FLOAT,
+    abs_error   FLOAT,
+    model       TEXT,
+    PRIMARY KEY (date, ticker)
+);

@@ -1,26 +1,25 @@
-# dags/fetch_stock_price_dag.py
+# ──────────────────── dags/fetch_stock_price_dag.py ────────────────────
 from datetime import datetime, timedelta
 import logging
-
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-
 import pandas as pd
 import yfinance as yf
 from curl_cffi import requests
 from sqlalchemy import create_engine
 
-# ──────────────────────────────────────────────
-from path import ProjectPath                 # ← 전역 경로 모음
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
-DB_URI     = ProjectPath.DB_URI              # path.py 에 정의
+from path import ProjectPath          # 전역 경로 모음
+
+DB_URI     = ProjectPath.DB_URI
 TABLE_NAME = "stock_price"
 TICKER     = "AAPL"
 engine     = create_engine(DB_URI)
-# ──────────────────────────────────────────────
 
 
 def fetch_stock_price():
+    """Yahoo Finance → Postgres(AAPL 최근 1일분)"""
     session = requests.Session(impersonate="chrome")
     df = (
         yf.Ticker(TICKER, session=session)
@@ -30,20 +29,16 @@ def fetch_stock_price():
     )
 
     if df.empty:
-        logging.warning(f"No data returned for {TICKER}.")
+        logging.warning(f"[FETCH] No data returned for {TICKER}")
         return
 
     df.columns = [c.lower().replace(" ", "_") for c in df.columns]
     df["ticker"] = TICKER
+    logging.info(f"[FETCH] Rows fetched: {len(df)}")
 
-    logging.info(f"Fetched {len(df)} rows for {TICKER}")
-
-    with engine.begin() as conn:             # auto‑commit
-        df.to_sql(TABLE_NAME, conn,
-                  if_exists="append",
-                  index=False,
-                  method="multi")
-    logging.info("Rows inserted into Postgres.")
+    with engine.begin() as conn:
+        df.to_sql(TABLE_NAME, conn, if_exists="append", index=False, method="multi")
+    logging.info("[FETCH] Inserted into Postgres")
 
 
 default_args = {
@@ -56,11 +51,21 @@ default_args = {
 with DAG(
     dag_id="fetch_stock_price_dag",
     default_args=default_args,
-    schedule_interval=None,
+    schedule_interval="@daily",      # 매일 1회 실행
     catchup=False,
     tags=["stockcast", "fetch"],
 ) as dag:
-    PythonOperator(
+
+    fetch_task = PythonOperator(
         task_id="fetch_stock_price",
         python_callable=fetch_stock_price,
     )
+
+    # ── 다음 단계 DAG 트리거 ─────────────────────
+    trigger_preprocess = TriggerDagRunOperator(
+        task_id="trigger_preprocess",
+        trigger_dag_id="preprocess_stock_dag",
+        wait_for_completion=False,
+    )
+
+    fetch_task >> trigger_preprocess

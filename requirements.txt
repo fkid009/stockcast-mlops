@@ -7,3 +7,5 @@ yfinance>=0.2.37
 curl_cffi>=0.6.4
 sqlalchemy
 psycopg2-binary
+streamlit
+matplotlib
