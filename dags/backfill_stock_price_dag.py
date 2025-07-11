@@ -12,12 +12,13 @@ from sqlalchemy import create_engine
 import pandas as pd
 import logging
 
+from path import ProjectPath      # 🔹 추가 – 공통 경로/상수
+
 # === 설정 ===
-TICKERS        = ["AAPL"]            # 👈 단일 종목
-PERIOD         = "5y"
-TABLE_NAME     = "stock_price"
-DB_URI         = "postgresql+psycopg2://airflow:airflow@postgres/airflow"
-engine         = create_engine(DB_URI)
+TICKERS    = ["AAPL"]
+PERIOD     = "5y"
+TABLE_NAME = "stock_price"
+engine     = create_engine(ProjectPath.DB_URI) 
 
 def backfill_prices():
     sess = requests.Session(impersonate="chrome")

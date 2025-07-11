@@ -1,0 +1,15 @@
+artifact_uri: file:///opt/airflow/mlruns/329857657022460764/4df38195132b4fc981533925e805db75/artifacts
+end_time: 1752214249397
+entry_point_name: ''
+experiment_id: '329857657022460764'
+lifecycle_stage: active
+run_id: 4df38195132b4fc981533925e805db75
+run_name: xgb_daily
+run_uuid: 4df38195132b4fc981533925e805db75
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1752214111498
+status: 3
+tags: []
+user_id: airflow

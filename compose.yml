@@ -1,3 +1,6 @@
+#
+# docker‑compose.yml
+#
 
 x-airflow-common: &airflow-common-env
   AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -5,10 +8,15 @@ x-airflow-common: &airflow-common-env
   AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
   AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
   AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+  # ───────── PYTHONPATH ─────────
+  PYTHONPATH: /opt/airflow/scripts:${PYTHONPATH}
 
 services:
+  # ──────────── Infra ────────────
   postgres:
     image: postgres:13
+    container_name: postgres
+    restart: always
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -18,7 +26,10 @@ services:
 
   redis:
     image: redis:latest
+    container_name: redis
+    restart: always
 
+  # ─────────── Airflow ───────────
   airflow-webserver:
     image: airflow-custom:latest
     container_name: airflow-webserver
@@ -34,8 +45,9 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
-      - ./scripts:/opt/airflow/scripts   #  ← 추가
-      - ./data:/opt/airflow/data    
+      - ./scripts:/opt/airflow/scripts
+      - ./data:/opt/airflow/data
+      - ./mlruns:/opt/airflow/mlruns
 
   airflow-scheduler:
     image: airflow-custom:latest
@@ -49,8 +61,9 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
-      - ./scripts:/opt/airflow/scripts   #  ← 추가
-      - ./data:/opt/airflow/data    
+      - ./scripts:/opt/airflow/scripts
+      - ./data:/opt/airflow/data
+      - ./mlruns:/opt/airflow/mlruns
 
   airflow-worker:
     image: airflow-custom:latest
@@ -64,8 +77,9 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
-      - ./scripts:/opt/airflow/scripts   #  ← 추가
-      - ./data:/opt/airflow/data    
+      - ./scripts:/opt/airflow/scripts
+      - ./data:/opt/airflow/data
+      - ./mlruns:/opt/airflow/mlruns
 
   airflow-init:
     image: airflow-custom:latest
@@ -76,7 +90,29 @@ services:
     environment:
       <<: *airflow-common-env
     entrypoint: /bin/bash
-    command: -c "airflow db init && airflow users create --username admin --firstname admin --lastname admin --role Admin --email admin@example.com --password admin"
+    command: >
+      -c "
+        airflow db init && \
+        airflow users create --username admin --firstname admin --lastname admin \
+          --role Admin --email admin@example.com --password admin
+      "
 
+  # ────────── MLflow UI ──────────
+  mlflow:
+    image: python:3.8-slim        # 필요 시 자체 이미지 사용
+    container_name: mlflow
+    working_dir: /opt/mlflow
+    entrypoint: >
+      sh -c "pip install --no-cache-dir mlflow && 
+             mlflow server --host 0.0.0.0 --port 5000
+             --backend-store-uri sqlite:///mlruns.db
+             --default-artifact-root /opt/mlflow/mlruns"
+    volumes:
+      - ./mlruns:/opt/mlflow/mlruns
+    ports:
+      - "5000:5000"
+    restart: always
+
+# ───────────── Volumes ─────────────
 volumes:
   postgres-db-volume:

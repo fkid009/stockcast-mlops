@@ -1,19 +1,24 @@
 # dags/fetch_stock_price_dag.py
 from datetime import datetime, timedelta
+import logging
+
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-import logging
+
 import pandas as pd
 import yfinance as yf
 from curl_cffi import requests
 from sqlalchemy import create_engine
 
 # ──────────────────────────────────────────────
-DB_CONN = "postgresql+psycopg2://airflow:airflow@postgres/airflow"
-engine = create_engine(DB_CONN)
+from path import ProjectPath                 # ← 전역 경로 모음
+
+DB_URI     = ProjectPath.DB_URI              # path.py 에 정의
 TABLE_NAME = "stock_price"
-TICKER = "AAPL"
+TICKER     = "AAPL"
+engine     = create_engine(DB_URI)
 # ──────────────────────────────────────────────
+
 
 def fetch_stock_price():
     session = requests.Session(impersonate="chrome")
@@ -28,16 +33,18 @@ def fetch_stock_price():
         logging.warning(f"No data returned for {TICKER}.")
         return
 
-    # ticker 컬럼 추가(스키마에 있다면)
-    df.columns = [col.lower().replace(" ", "_") for col in df.columns]
+    df.columns = [c.lower().replace(" ", "_") for c in df.columns]
     df["ticker"] = TICKER
 
     logging.info(f"Fetched {len(df)} rows for {TICKER}")
-    # DB INSERT
-    with engine.begin() as conn:            # 자동 commit
+
+    with engine.begin() as conn:             # auto‑commit
         df.to_sql(TABLE_NAME, conn,
-                  if_exists="append", index=False, method="multi")
+                  if_exists="append",
+                  index=False,
+                  method="multi")
     logging.info("Rows inserted into Postgres.")
+
 
 default_args = {
     "owner": "airflow",
@@ -47,13 +54,13 @@ default_args = {
 }
 
 with DAG(
-    "fetch_stock_price_dag",
+    dag_id="fetch_stock_price_dag",
     default_args=default_args,
     schedule_interval=None,
     catchup=False,
     tags=["stockcast", "fetch"],
 ) as dag:
-    fetch_task = PythonOperator(
+    PythonOperator(
         task_id="fetch_stock_price",
         python_callable=fetch_stock_price,
     )

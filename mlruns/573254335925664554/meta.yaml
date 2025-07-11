@@ -1,0 +1,6 @@
+artifact_location: file:///opt/airflow/mlruns/573254335925664554
+creation_time: 1752214108798
+experiment_id: '573254335925664554'
+last_update_time: 1752214108798
+lifecycle_stage: active
+name: daily_training
