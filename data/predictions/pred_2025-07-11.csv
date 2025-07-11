@@ -1,0 +1,2 @@
+date,ticker,pred_close,model
+2025-07-11,AAPL,212.34210205078125,xgb

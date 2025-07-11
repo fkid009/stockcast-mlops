@@ -1,83 +1,70 @@
+# ─────────────────────────────  scripts/train_model.py  ──────────────────────────
 """
-train_model.py  ‑‑ 매일 실행되는 단순 재학습 스크립트
+• 매일 재학습
+• Ridge / XGBoost 둘 다 학습하여 RMSE가 더 낮은 모델 하나만
+  data/models/latest/best_model.{pkl|json} 로 저장
+• MLflow 로 experiment 기록
 """
-import logging
-import yaml
-import joblib
-import mlflow
-import numpy as np
-from pathlib import Path
+import json, logging, yaml, joblib, mlflow, numpy as np
 from sklearn.linear_model import Ridge
 from xgboost import XGBRegressor
+from path import ProjectPath
 
-from path import ProjectPath  # ★ 경로 전역 관리
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s | %(message)s"
+)
 
-# ────────────── 경로 상수
-PARAM_PATH   = ProjectPath.PARAM_YAML
-FEATURE_PATH = ProjectPath.X_NPY
-TARGET_PATH  = ProjectPath.Y_NPY
-MODEL_DIR    = ProjectPath.MODELS_DIR / "latest"
-MLRUNS_URI   = f"file://{ProjectPath.MLRUNS_DIR}"
-
+# 경로
+PARAM_YAML  = ProjectPath.PARAM_YAML
+X_PATH      = ProjectPath.PROCESSED_DATA_DIR / "X_train.npy"
+Y_PATH      = ProjectPath.PROCESSED_DATA_DIR / "y_train.npy"
+MODEL_DIR   = ProjectPath.MODELS_DIR / "latest"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-# ────────────── 유틸
 def load_params():
-    logging.info("Loading parameters from YAML...")
-    with open(PARAM_PATH) as f:
+    with open(PARAM_YAML) as f:
         return yaml.safe_load(f)
 
-def load_dataset():
-    logging.info("Loading dataset from .npy files...")
-    X = np.load(FEATURE_PATH)
-    y = np.load(TARGET_PATH)
-    logging.info(f"Loaded features shape: {X.shape}, target shape: {y.shape}")
-    return X, y
-
-# ────────────── 학습
 def train():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s"
-    )
-
-    logging.info("Starting training script...")
-    
-    mlflow.set_tracking_uri(MLRUNS_URI)
     mlflow.set_experiment("daily_training")
+    prm = load_params()
+    X   = np.load(X_PATH)
+    y   = np.load(Y_PATH)
 
-    params = load_params()
-    X, y   = load_dataset()
+    best = {"rmse": 1e9}
 
-    # Ridge
-    logging.info("Training Ridge model...")
+    # ── Ridge ───────────────────────────────────────────────────────
     with mlflow.start_run(run_name="ridge_daily"):
-        ridge = Ridge(**params["ridge"])
-        ridge.fit(X, y)
-        joblib.dump(ridge, MODEL_DIR / "ridge.pkl")
-        logging.info("Ridge model trained and saved.")
-        
-        rmse = np.sqrt(((ridge.predict(X) - y) ** 2).mean())
+        ridge = Ridge(**prm["ridge"]).fit(X, y)
+        rmse  = np.sqrt(((ridge.predict(X) - y) ** 2).mean())
+        mlflow.log_metric("rmse", rmse)
+        mlflow.sklearn.log_model(ridge, "model")
         logging.info(f"Ridge RMSE: {rmse:.4f}")
+        if rmse < best["rmse"]:
+            best = {"rmse": rmse, "type": "ridge",
+                    "path": MODEL_DIR / "best_model.pkl"}
+            joblib.dump(ridge, best["path"])
 
-        mlflow.sklearn.log_model(ridge, artifact_path="model")
-        mlflow.log_metric("rmse", rmse)
-
-    # XGBoost
-    logging.info("Training XGBoost model...")
+    # ── XGBoost ─────────────────────────────────────────────────────
     with mlflow.start_run(run_name="xgb_daily"):
-        xgb = XGBRegressor(**params["xgb"])
-        xgb.fit(X, y)
-        joblib.dump(xgb, MODEL_DIR / "xgb.json")
-        logging.info("XGBoost model trained and saved.")
-        
+        xgb = XGBRegressor(**prm["xgb"]).fit(X, y)
         rmse = np.sqrt(((xgb.predict(X) - y) ** 2).mean())
-        logging.info(f"XGBoost RMSE: {rmse:.4f}")
-
-        mlflow.xgboost.log_model(xgb, artifact_path="model")
         mlflow.log_metric("rmse", rmse)
+        mlflow.xgboost.log_model(xgb, "model")
+        logging.info(f"XGBoost RMSE: {rmse:.4f}")
+        if rmse < best["rmse"]:
+            best = {"rmse": rmse, "type": "xgb",
+                    "path": MODEL_DIR / "best_model.json"}
+            xgb.save_model(best["path"])
 
-    logging.info("Training script finished successfully.")
+    # ── 결과 정리 ────────────────────────────────────────────────────
+    meta = {"type": best["type"], "rmse": best["rmse"]}
+    with open(MODEL_DIR / "best_model_meta.json", "w") as f:
+        json.dump(meta, f)
+
+    logging.info(f"◎ Best model: {best['type']}  (RMSE={best['rmse']:.4f})")
+    logging.info("✔ Saved best_model and meta.json")
 
 if __name__ == "__main__":
     train()

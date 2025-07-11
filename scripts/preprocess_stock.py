@@ -31,13 +31,22 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def split_and_save(df: pd.DataFrame):
-    feats = ["open", "high", "low", "close", "volume",
-             "ma5", "pct_change_1d", "log_volume"]
-    X, y = df[feats].values, df["target"].values
-    np.save(OUTPUT_DIR / "X.npy", X)
-    np.save(OUTPUT_DIR / "y.npy", y)
-    logging.info("Saved X%s, y%s to %s", X.shape, y.shape, OUTPUT_DIR)
+    feat_cols = ["open", "high", "low", "close", "volume",
+                 "ma5", "pct_change_1d", "log_volume"]
 
+    X_all, y_all = df[feat_cols].values, df["target"].values
+
+    X_train, y_train = X_all[:-1], y_all[:-1]  # 마지막 1행 제외
+    X_inf            = X_all[-1:]             # shape (1, n_feat)
+
+    np.save(ProjectPath.PROCESSED_DATA_DIR / "X_train.npy", X_train)
+    np.save(ProjectPath.PROCESSED_DATA_DIR / "y_train.npy", y_train)
+    np.save(ProjectPath.PROCESSED_DATA_DIR / "X_inf.npy" , X_inf)
+
+    logging.info(
+        f"Saved → "
+        f"X_train {X_train.shape}, y_train {y_train.shape}, X_inf {X_inf.shape}"
+    )
 def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s - %(message)s")
