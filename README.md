@@ -115,6 +115,16 @@ dvc init && dvc pull
 
 # Run Airflow scheduler + webserver
 docker-compose -f docker/airflow/docker-compose.yml up -d
+
+# Create Airflow admin user 
+docker compose exec airflow-webserver bash -c "
+airflow users create \
+  --username admin \
+  --firstname Admin \
+  --lastname Admin \
+  --role Admin \
+  --email admin@example.com \
+  --password admin
 ```
 
 ---
