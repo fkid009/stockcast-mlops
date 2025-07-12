@@ -1,7 +1,7 @@
-# 📈 stockcast-mlops
+# stockcast-mlops
 
-A fully automated MLOps pipeline for stock price prediction, built with Airflow, scikit-learn, MLflow, DVC, FastAPI, and Streamlit.  
-It predicts the next-day closing price of a stock and serves it through an API and dashboard — ready for AWS deployment.
+A fully automated MLOps pipeline for stock price prediction, built with Airflow, scikit-learn, MLflow, and Streamlit. 
+It predicts the next-day closing price of a stock and serves it through an API and dashboard.
 
 ---
 
@@ -13,11 +13,8 @@ It predicts the next-day closing price of a stock and serves it through an API a
 - Extracts technical indicators and features
 - Trains regression models (Ridge, XGBoost)
 - Tracks experiments with MLflow
-- Versions data and models with DVC
-- Serves predictions via FastAPI
-- Visualizes results with Streamlit
+- Serves predictions via a Streamlit dashboard
 - Automates all tasks with Airflow
-- Prepares for AWS migration (RDS, S3, EC2)
 
 ---
 
@@ -32,9 +29,7 @@ It predicts the next-day closing price of a stock and serves it through an API a
 │         ↓             ↓                   │
 │    train_model    evaluate_model          │
 │         ↓             ↓                   │
-│  check_performance_drop ─────┐            │
-│         ↓                    │            │
-│     save_prediction          │            │
+│     predict          │            │
 │                              │            │
 │        ┌──────────────────────────────┐   │
 │        │ stock_tuning_dag (GridSearch)│◄──┘
@@ -52,12 +47,10 @@ It predicts the next-day closing price of a stock and serves it through an API a
 | Data Fetching          | yfinance                               |
 | ML Models              | Ridge, XGBoost (scikit-learn, xgboost) |
 | Experiment Tracking    | MLflow                                 |
-| Data/Model Versioning  | DVC                                    |
-| Database               | PostgreSQL (Docker, RDS)               |
-| API Service            | FastAPI                                |
+| Database               | PostgreSQL (Docker)               |
 | Dashboard              | Streamlit                              |
-| Deployment CI/CD       | GitHub Actions                         |
-| Cloud Migration        | AWS (RDS, S3, EC2, MWAA)               |
+| Deployment CI/CD       | GitHub Actions (Planned)               |
+| Cloud Migration        | AWS (RDS, S3, EC2, MWAA) (Planned)      |
 
 ---
 
@@ -67,18 +60,17 @@ It predicts the next-day closing price of a stock and serves it through an API a
 stockcast-mlops/
 │
 ├── dags/                # Airflow DAGs
-├── data/                # Raw and processed data (DVC tracked)
-├── models/              # Trained models (DVC tracked)
-├── notebooks/           # Exploratory analysis
-├── src/
-│   ├── data/            # fetch_data.py, feature_engineering.py
-│   ├── model/           # train_model.py, tune_model.py
-│   ├── api/             # FastAPI app
-│   └── dashboard/       # Streamlit app
-├── docker/
-│   ├── airflow/         # Airflow docker-compose config
-│   └── postgres/        # PostgreSQL setup
-├── dvc.yaml             # DVC pipeline
+├── data/                # Raw and processed data
+│   ├── models/          # Trained models
+│   ├── params/          # Model parameters
+│   └── predictions/     # Model predictions
+├── postgres-init/       # PostgreSQL initialization scripts
+├── scripts/             # Python scripts for DAGs
+│   ├── preprocess_stock.py
+│   ├── train_model.py
+│   └── streamlit_app.py
+├── compose.yml          # Docker Compose configuration
+├── Dockerfile           # Custom Airflow Docker image
 ├── requirements.txt     # Python dependencies
 └── README.md
 ```
@@ -87,10 +79,10 @@ stockcast-mlops/
 
 ## Models & Strategy
 
-- Daily training with fixed hyperparameters (Ridge or XGBoost)
-- Performance drop detection → GridSearch tuning
-- MLflow experiment logging
-- DVC tracks all dataset/model versions
+- Daily training with Ridge and XGBoost models.
+- The model with the lower RMSE is selected as the best model.
+- MLflow is used for experiment logging.
+- Weekly hyperparameter tuning is performed to improve model performance.
 
 ---
 
@@ -101,50 +93,44 @@ stockcast-mlops/
 git clone https://github.com/your-username/stockcast-mlops.git
 cd stockcast-mlops
 
-# Create virtual environment
-python -m venv venv && source venv/bin/activate
+# Create .env file from .env_example and fill in the values
+cp .env_example .env
 
-# Install dependencies
-pip install -r requirements.txt
+# Build and run the services using Docker Compose
+docker-compose up --build -d
 
-# Start PostgreSQL (Docker)
-docker-compose -f docker/postgres/docker-compose.yml up -d
-
-# Initialize DVC
-dvc init && dvc pull
-
-# Run Airflow scheduler + webserver
-docker-compose -f docker/airflow/docker-compose.yml up -d
-
-# Create Airflow admin user 
-docker compose exec airflow-webserver bash -c "
-airflow users create \
-  --username admin \
-  --firstname Admin \
-  --lastname Admin \
-  --role Admin \
-  --email admin@example.com \
-  --password admin
+# Access the services:
+# - Airflow UI: http://localhost:8080
+# - Streamlit Dashboard: http://localhost:8501
+# - MLflow UI: http://localhost:5000
 ```
 
 ---
 
-## API Endpoints (FastAPI)
+## Database Schema
 
-| Endpoint   | Method | Description                  |
-| ---------- | ------ | ---------------------------- |
-| `/predict` | POST   | Predict next-day price       |
-| `/metrics` | GET    | Get latest model performance |
-| `/health`  | GET    | API health check             |
+The project uses a PostgreSQL database with the following tables:
 
----
+- **stock_price**: Stores historical stock price data.
+  - `date`: Timestamp of the data point.
+  - `open`, `high`, `low`, `close`: Stock prices.
+  - `volume`: Trading volume.
+  - `dividends`, `stock_splits`: Corporate actions.
+  - `ticker`: Stock ticker symbol.
 
-## Dashboard (Streamlit)
+- **stock_pred**: Stores model predictions.
+    - `date`: Date of the prediction.
+    - `ticker`: Stock ticker symbol.
+    - `pred_close`: Predicted closing price.
+    - `model`: The model used for the prediction.
 
-```bash
-cd src/dashboard
-streamlit run app.py
-```
+- **stock_pred_eval**: Stores the evaluation of the predictions.
+  - `date`: Date of the evaluation.
+  - `ticker`: Stock ticker symbol.
+  - `pred_close`: Predicted closing price.
+  - `true_close`: Actual closing price.
+  - `abs_error`: Absolute error between predicted and actual prices.
+  - `model`: The model used for the prediction.
 
 ---
 
@@ -153,7 +139,6 @@ streamlit run app.py
 | Component      | Target Service |
 | -------------- | -------------- |
 | PostgreSQL     | Amazon RDS     |
-| DVC Storage    | Amazon S3      |
 | MLflow Backend | S3 + EC2       |
 | API & UI       | EC2 / Fargate  |
 | Orchestration  | Amazon MWAA    |
