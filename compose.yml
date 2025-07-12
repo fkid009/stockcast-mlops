@@ -108,5 +108,19 @@ services:
       - ./data:/opt/airflow/data
     restart: always                       # 컨테이너 재시작 시 자동 실행
 
+  fastapi:
+    image: python:3.8-slim
+    container_name: fastapi
+    working_dir: /opt/fastapi
+    entrypoint: >
+      sh -c "pip install --no-cache-dir fastapi uvicorn sqlalchemy pandas psycopg2-binary &&
+             uvicorn app:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ./scripts/api:/opt/fastapi
+      - ./scripts:/opt/fastapi/scripts
+    ports:
+      - "8000:8000"
+    restart: always
+
 volumes:
   postgres-db-volume:

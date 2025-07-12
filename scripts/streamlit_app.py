@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 from sqlalchemy import create_engine
 from path import ProjectPath   # 전역 경로 모음
 
+API_URL = "http://fastapi:8000"
+
+
 st.set_page_config(page_title="📈 Stock Prediction Dashboard",
                    layout="wide")
 
