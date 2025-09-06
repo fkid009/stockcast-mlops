@@ -21,10 +21,25 @@ CREATE TABLE IF NOT EXISTS ohlcv_daily (
   UNIQUE (ticker_id, dt)
 );
 
-CREATE TABLE IF NOT EXISTS features_daily (
+-- CREATE TABLE IF NOT EXISTS features_daily (
+--   id BIGSERIAL PRIMARY KEY,
+--   ticker_id INT NOT NULL REFERENCES tickers(ticker_id) ON DELETE CASCADE,
+--   dt DATE NOT NULL,
+--   lag_close_1 DOUBLE PRECISION,
+--   ma_5        DOUBLE PRECISION,
+--   ma_20       DOUBLE PRECISION,
+--   ma_gap      DOUBLE PRECISION,
+--   std_20      DOUBLE PRECISION,
+--   lag_vol_1   DOUBLE PRECISION,
+--   vol_z20     DOUBLE PRECISION,
+--   created_at TIMESTAMPTZ DEFAULT NOW(),
+--   UNIQUE (ticker_id, dt)
+-- );
+
+CREATE TABLE IF NOT EXISTS training_dataset (
   id BIGSERIAL PRIMARY KEY,
   ticker_id INT NOT NULL REFERENCES tickers(ticker_id) ON DELETE CASCADE,
-  dt DATE NOT NULL,
+  asof_date DATE NOT NULL,  -- t (features 시점)
   lag_close_1 DOUBLE PRECISION,
   ma_5        DOUBLE PRECISION,
   ma_20       DOUBLE PRECISION,
@@ -32,8 +47,9 @@ CREATE TABLE IF NOT EXISTS features_daily (
   std_20      DOUBLE PRECISION,
   lag_vol_1   DOUBLE PRECISION,
   vol_z20     DOUBLE PRECISION,
+  y_price_next DOUBLE PRECISION NOT NULL,  -- t+1 adj_close
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (ticker_id, dt)
+  UNIQUE (ticker_id, asof_date)
 );
 
 CREATE TABLE IF NOT EXISTS predictions_daily (
