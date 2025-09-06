@@ -147,7 +147,7 @@ def insert_backfilled(*,
     data = load_yaml(UTILS_DIR / "tickers.yaml")
     symbols: List[str] = [str(s).strip() for s in (data.get("tickers") or []) if str(s).strip()]
     if not symbols:
-        print("[backfill] No tickers provided. Skip.")
+        logging.info("[backfill] No tickers provided. Skip.")
         return
 
     pg = PostgresHook(postgres_conn_id=conn_id)
@@ -162,7 +162,7 @@ def insert_backfilled(*,
 
         # Guard: run the initial backfill only once per ticker
         if has_rows_for_ticker(pg, tid):
-            print(f"[backfill] skip {sym}: already has rows")
+            logging.info(f"[backfill] skip {sym}: already has rows")
             continue
 
         try:
@@ -174,14 +174,14 @@ def insert_backfilled(*,
                 auto_adjust=False,  # keep original OHLCV + Adj Close
             )
         except Exception as e:
-            print(f"[backfill] {sym}: download error: {e}")
+            logging.info(f"[backfill] {sym}: download error: {e}")
             continue
 
         n = insert_ohlcv(pg, tid, df)
-        print(f"[backfill] {sym}: rows={n}")
+        logging.info(f"[backfill] {sym}: rows={n}")
         total += n
 
-    print(f"[backfill] total rows={total}")
+    logging.info(f"[backfill] total rows={total}")
 
 
 def upsert_ohlcv(*, 
