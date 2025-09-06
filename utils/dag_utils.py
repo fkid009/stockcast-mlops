@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional, List
+import logging
 
 from utils.utils import load_sql, load_yaml
 from utils.path import SQL_DIR, UTILS_DIR
@@ -181,3 +182,73 @@ def insert_backfilled(*,
         total += n
 
     print(f"[backfill] total rows={total}")
+
+
+def upsert_ohlcv(*, 
+                 logical_ds: str, 
+                 conn_id: str = "postgres", 
+                 source: str = "yfinance") -> None:
+    """
+    Daily incremental UPSERT for all symbols in utils/tickers.yaml over [yesterday, today).
+    """
+    exec_date = datetime.strptime(logical_ds, "%Y-%m-%d").date()
+    start = exec_date - timedelta(days=1)
+    end = exec_date
+
+    data = load_yaml(UTILS_DIR / "tickers.yaml")
+    symbols: List[str] = [str(s).strip() for s in (data.get("tickers") or []) if str(s).strip()]
+    if not symbols:
+        logging.info("[upsert] No tickers provided. Skip.")
+        return
+
+    pg = PostgresHook(postgres_conn_id=conn_id)
+    batch_rows = []
+
+    for sym in symbols:
+        try:
+            tid = insert_ticker(pg, sym)
+
+            df = yf.download(
+                sym,
+                start=start.isoformat(),
+                end=end.isoformat(),
+                progress=False,
+                auto_adjust=False,
+            )
+            df = _normalize_ohlcv_df(df)
+            if df.empty:
+                logging.info(f"[upsert] {sym}: no new rows for [{start} -> {end})")
+                continue
+
+            rows = list(
+                zip(
+                    [tid] * len(df),
+                    df["Date"].tolist(),
+                    df["open"].to_numpy(dtype=float).tolist(),
+                    df["high"].to_numpy(dtype=float).tolist(),
+                    df["low"].to_numpy(dtype=float).tolist(),
+                    df["close"].to_numpy(dtype=float).tolist(),
+                    df["adj_close"].to_numpy(dtype=float).tolist(),
+                    df["volume"].to_numpy(dtype=int).tolist(),
+                    [source] * len(df),
+                )
+            )
+            batch_rows.extend(rows)
+
+            inserted_dates = ", ".join(str(d) for d in df["Date"].tolist())
+            logging.info(f"[upsert] {sym}: prepared {len(rows)} rows for dates: {inserted_dates}")
+
+        except Exception as e:
+            logging.exception(f"[upsert] {sym}: error during fetch/prepare: {e}")
+
+    if not batch_rows:
+        logging.info("[upsert] nothing to upsert.")
+        return
+
+    sql = load_sql(SQL_DIR / "upsert_ohlcv.sql")
+    with pg.get_conn() as conn, conn.cursor() as cur:
+        extras.execute_values(cur, sql, batch_rows, page_size=1000)
+        conn.commit()
+
+    logging.info(f"[upsert] total rows upserted (attempted)={len(batch_rows)}")
+
