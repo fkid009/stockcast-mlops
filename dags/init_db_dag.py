@@ -16,7 +16,7 @@ CONN_ID = "postgres"
 
 with DAG(
     dag_id = "init_db_dag",
-    description="Initialize core tables",
+    description="Initialize tables",
     start_date = datetime(2025, 9, 4),
     schedule_interval = None,
     catchup = False,
@@ -24,9 +24,9 @@ with DAG(
 ) as dag:
     
     create_core = SQLExecuteQueryOperator(
-        task_id = "create_core_tables",
+        task_id = "create_tables",
         conn_id = "postgres",
-        sql = load_sql("create_core.sql")
+        sql = load_sql("create_table.sql")
     )
 
     insert_backfill = PythonOperator(
